@@ -1,30 +1,48 @@
 var path = require('path');
 var express = require('express');
+var session = require('express-session');
+var MongoStore = require('connect-mongo')(session);
+var flash = require('connect-flash');
+var config = require('config-lite');
+var routes = require('./routes');
+var pkg = require('./package');
+
 var app = express();
-var indexRouter = require('./routes/index.js');
-var usersRouter = require('./routes/users.js');
 
 app.set('views',path.join(__dirname,'views'));
 app.set('view engine','ejs');
 
-app.use(function(req,res,next){
-	console.log(1);
-	next(new Error('haha'));
-})
+app.use(express.static(path.join(__dirname,'public')));
 
-app.use(function(req,res,next){
-	console.log(2);
-	res.status(200).end();
-})
+app.use(session({
+	name: config.session.key,
+	secret: config.session.secret,
+	cookie: {
+		maxAge: config.session.maxAge
+	},
+	store: new MongoStore({
+		url: config.mongodb
+	})
+}));
 
-app.use(function(err,req,res,next){
-	console.error(err.stack);
-	res.status(500).send('error');
-})
+app.use(flash());
 
-app.use('/',indexRouter);
-app.use('/users',usersRouter);
+// 设置模板全局常量
+app.locals.blog = {
+  title: pkg.name,
+  description: pkg.description
+};
 
-app.listen(7788);
+// 添加模板必需的三个变量
+app.use(function (req, res, next) {
+  res.locals.user = req.session.user;
+  res.locals.success = req.flash('success').toString();
+  res.locals.error = req.flash('error').toString();
+  next();
+});
 
-console.log('server starting');
+routes(app);
+
+app.listen(config.port,function(){
+	console.log(`${pkg.name} listening on port ${config.port}`);
+});
